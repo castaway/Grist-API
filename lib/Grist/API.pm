@@ -1,7 +1,6 @@
-package Tools::Grist;
+package Grist::API;
 
-use strict;
-use warnings;
+use strictures 2;
 use v5.30;
 use REST::Client;
 use JSON;
