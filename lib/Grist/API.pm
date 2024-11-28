@@ -7,13 +7,47 @@ use JSON;
 use Data::Dumper;
 
 use Moo;
+
+=head2 Attributes
+
+These are normal Moo attributes -- set them with `$grist->attribute("value")`, fetch them with `$grist->attribute`, pass them to the constructor as `Grist::API->new({attribute => "value"})`.
+
+=head3 site
+
+The site string used to access this partiuclar set of stuff.  This is the `foo`` in `https://foo.getgrist.com/`.  For your personal documents, this is "docs".  It's also the "domain" key from the `/orgs` API endpoint.
+
+=cut
+
+has site => ( is => 'ro', required => 1 );
+
+=head3 debug
+
+If true, this will dump various stuff at various points.  What stuff, what points, and if it distinguishes between different types of true values are all subject to change.  The only thing not subject to change is that it defaults to `0`.
+
+=cut
+
 has debug => ( is => 'rw', default => sub { 0; });
+
+=head3 access_key
+
+The access key you got from the Grist site.  To find this, go to http://foo.getgrist.com/ (for your value of "foo"), click on your icon/initials in the top-right corner, profile settings, and look in the "API" section.  Do not share this with anyone you do not want to do anything you can do on the grist site, and absolutely never share it publically.
+
+=cut
+
 has access_key => (is => 'rw');
+
+=head3 rc_client
+
+An instance of REST::Client with a few settings to make it more useful for us.  If you find yourself needing this (and aren't writing Grist::API itself), it means that Grist::API is incomplete, so please let me know what you needed it for by filing an issue -- see the BUGS section of this document.  Tag it "wishlist".
+
+=cut
+
 has rc_client => (is => 'lazy',
                   default => sub {
                       my ($self) = @_;
+                      my $team = $self->team;
                        my $client = REST::Client->new(
-                           host => 'https://foolsdog.getgrist.com/api',
+                           host => "https://$site.getgrist.com/api",
                            );
                        $client->addHeader('Authorization', 'Bearer '. $self->access_key);
                        $client->addHeader('Content-Type', 'application/json');
