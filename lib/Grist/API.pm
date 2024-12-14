@@ -5,12 +5,13 @@ use v5.30;
 use REST::Client;
 use JSON;
 use Data::Dumper;
+use URI;
 
 use Moo;
 
 =head2 Attributes
 
-These are normal Moo attributes -- set them with `$grist->attribute("value")`, fetch them with `$grist->attribute`, pass them to the constructor as `Grist::API->new({attribute => "value"})`.
+These are normal Moo attributes -- set them with `$grist->attribute("value")`, fetch them with `$grist->attribute`, pass them to the constructor as `Grist::API->new(attribute => "value")`.
 
 =head3 site
 
@@ -45,7 +46,7 @@ An instance of REST::Client with a few settings to make it more useful for us.  
 has rc_client => (is => 'lazy',
                   default => sub {
                       my ($self) = @_;
-                      my $team = $self->team;
+                      my $site = $self->site;
                        my $client = REST::Client->new(
                            host => "https://$site.getgrist.com/api",
                            );
@@ -57,7 +58,6 @@ has rc_client => (is => 'lazy',
                        
                   });
 has workspaces => (is => 'rw');
-has master_doc => (is => 'rw');
 has tables     => (is => 'rw');
 has apps       => (is => 'rw');
 
@@ -66,29 +66,54 @@ sub get_workspaces {
 
     my $workspaces = decode_json($self->rc_client->GET('orgs/current/workspaces')->responseContent());
     print Dumper($workspaces) if $self->debug;
-    my ($master_doc) = grep { $_->{name} =~ /Master/ } @{ $workspaces->[0]{docs} };
 
-    $self->master_doc($master_doc);
     $self->workspaces($workspaces);
+
+    return $workspaces;
 }
 
 sub get_tables {
-    my ($self) = @_;
+    my ($self, %args) = @_;
+    my $doc_obj = $args{doc};
+    my $doc_id = $doc_obj->{id};
 
-    my $tables = decode_json($self->rc_client->GET('docs/' . $self->master_doc->{id} . '/tables')->responseContent());
+    say "doc id: $doc_id";
+
+    my $json = decode_json($self->rc_client->GET("docs/$doc_id/tables")->responseContent());
+    my $tables = $json->{tables};
     print Dumper($tables) if $self->debug;
 
     $self->tables($tables);
+
+    return $tables;
 }
 
-sub get_apps {
-    my ($self) = shift;
+=head3 get_records
 
-    my $app_data = decode_json($self->rc_client->GET('docs/' . $self->master_doc->{id} . '/tables/ProductNames/records')->responseContent());
-    print Dumper($app_data) if $self->debug;
+Returns an array-ref of records, each of which is a hash-ref keyed by column and with values of ... well, the values.
 
-    $self->apps($app_data);
+Most values will be their obvious forms.  Booleans will come out as whatever the JSON module gives -- a JSON::PP::Boolean object under old perls, or the one true true/false value under newer perls.  (FIXME: verify and document what version of perl this changes in.)
+
+The `doc` and `table` named arguments are handled by this module, and should be the doc and table as returned by `->get_workspaces` and `->get_tables`.  (Or, at least, hashrefs with id fields.)  All other arguments are passed as query parameters, and you can use this mechinisim to pass `filter`, `sort`, `limit`, and `hidden`.  These should be plain strings as documented at https://support.getgrist.com/api/#tag/records/operation/listRecords.  What happens when you pass references is subject to change in the future.
+
+If you pass `hidden => "true"` as an argument, the module will not attempt to split the fields between user-supplied and internal fields.  The only hidden field I know of at present is `manualSort`.
+
+=cut
+
+sub get_records {
+    my ($self, %args) = @_;
+    my $doc_id = (delete $args{doc})->{id};
+    my $table_id = (delete $args{table})->{id};
+
+    my $uri = URI->new("docs/$doc_id/tables/$table_id/records");
+    $uri->query_form(%args);
+
+    my $json = decode_json($self->rc_client->GET($uri)->responseContent());
+    print Dumper($json) if $self->debug;
+
+    return $json->{records};
 }
+
 1;
 
 # print Dumper($app_data);
